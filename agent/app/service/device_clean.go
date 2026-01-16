@@ -997,6 +997,11 @@ func dropTaskLog(logDir string) {
 		return
 	}
 	taskType := path.Base(logDir)
+	if len(files) == 0 {
+		dropFileOrDir(logDir)
+		_ = taskRepo.Delete(repo.WithByType(taskType))
+		return
+	}
 	var usedTasks []string
 	switch taskType {
 	case "Cronjob":
@@ -1017,12 +1022,6 @@ func dropTaskLog(logDir string) {
 		_ = global.DB.Model(&model.BackupRecord{}).Where("task_id != ?", "").Select("task_id").Find(&usedTasks).Error
 	case "Clam":
 		_ = global.DB.Model(&model.ClamRecord{}).Where("task_id != ?", "").Select("task_id").Find(&usedTasks).Error
-	case "Tamper":
-		xpackDB, err := common.LoadDBConnByPathWithErr(path.Join(global.CONF.Base.InstallDir, "1panel/db/xpack.db"), "xpack.db")
-		if err == nil {
-			_ = xpackDB.Table("tampers").Where("task_id != ?", "").Select("task_id").Find(&usedTasks).Error
-		}
-		defer common.CloseDB(xpackDB)
 	case "System":
 		xpackDB, err := common.LoadDBConnByPathWithErr(path.Join(global.CONF.Base.InstallDir, "1panel/db/xpack.db"), "xpack.db")
 		if err == nil {
@@ -1046,7 +1045,12 @@ func dropTaskLog(logDir string) {
 		}
 		_ = os.Remove(logDir + "/" + item.Name())
 	}
-	_ = taskRepo.Delete(repo.WithByType(taskType), taskRepo.WithByIDNotIn(usedTasks))
+	if len(usedTasks) != 0 {
+		_ = taskRepo.Delete(repo.WithByType(taskType), taskRepo.WithByIDNotIn(usedTasks))
+		return
+	}
+	dropFileOrDir(logDir)
+	_ = taskRepo.Delete(repo.WithByType(taskType))
 }
 
 func dropWithExclude(pathToDelete string, excludeSubDirs []string, taskItem *task.Task, size *int64, count *int) {
